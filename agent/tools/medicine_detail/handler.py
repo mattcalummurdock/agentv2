@@ -1,26 +1,11 @@
 from pipecat.services.llm_service import FunctionCallParams
 
 from tools.medicine_detail.bulk_pricing import attach_bulk_pricing
-from tools.medicine_detail.guards import is_non_medicine_lookup
 from tools.medicine_detail.search import search_medicines_by_mention, search_terms_from_mention
 
 
 async def handler(params: FunctionCallParams) -> None:
     name = params.arguments["name"]
-
-    if is_non_medicine_lookup(name):
-        await params.result_callback(
-            {
-                "medicines": [],
-                "skipped": True,
-                "reason": (
-                    f"'{name}' is not a medicine product lookup — caller did not ask for this, "
-                    "or this is Mr. Med / company / intake meta. Do NOT tell the caller you "
-                    "could not find a medicine. Continue the conversation without mentioning tools."
-                ),
-            }
-        )
-        return
 
     medicines = await search_medicines_by_mention(name)
     if not medicines:

@@ -8,7 +8,7 @@ async def attach_bulk_pricing(medicines: list[dict[str, Any]]) -> None:
     if not ids:
         return
 
-    pool = get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """

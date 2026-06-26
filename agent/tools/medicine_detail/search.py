@@ -245,7 +245,7 @@ def _passes_min_score(row: dict[str, Any]) -> bool:
 async def text_search(mention: str) -> list[dict[str, Any]]:
     terms = search_terms_from_mention(mention)
     best_by_id: dict[int, dict[str, Any]] = {}
-    pool = get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
         for term in terms:
             rows = await conn.fetch(_TEXT_SQL, term, TEXT_SIMILARITY_THRESHOLD)
@@ -265,7 +265,7 @@ async def pack_letter_search(mention: str, *, min_score: float = 45.0) -> list[d
         return []
 
     best_by_id: dict[int, dict[str, Any]] = {}
-    pool = get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
         for clue in clues[:4]:
             rows = await conn.fetch(_PACK_CANDIDATE_SQL, clue, PACK_SIMILARITY_THRESHOLD)

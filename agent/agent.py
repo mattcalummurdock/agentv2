@@ -22,8 +22,13 @@ from pipecat.turns.user_mute import FunctionCallUserMuteStrategy
 
 from config.transport import transport_params
 from prompts.system import INITIAL_USER_MESSAGE
-from services.google_llm import create_llm, fix_credentials
 from services import hold_phrases
+from services.google_llm import create_llm, fix_credentials
+from services.metrics_log import (
+    MetricsLogObserver,
+    TtfbStartOnUserStop,
+    create_latency_observer,
+)
 from services.tool_call_input_gate import ToolCallInputGate
 from tools.medicine_detail.db import close_pool, init_pool
 from tools.medicine_detail.semantic import prewarm_embedding_model
@@ -33,7 +38,7 @@ load_dotenv(override=True)
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
-    logger.info("Starting Agent")
+    logger.info("Starting Agent (Gemini 3.1 Flash Live)")
 
     await init_pool()
     if prewarm_embedding_model():
@@ -45,16 +50,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     llm = create_llm(tools=build_tools_schema())
     register_tools(llm)
 
-    # Inject a hold-phrase audio clip the instant any tool call starts.
-    # This fires BEFORE the function executes, so the user hears it while
-    # the DB query runs — eliminating the silent gap.
     @llm.event_handler("on_function_calls_started")
     async def _on_tool_start(llm, function_calls):
         llm.set_audio_input_paused(True)
         pcm = hold_phrases.get_random_pcm()
         if not pcm:
             return
-        # Push raw PCM in 100 ms chunks (3200 bytes at 16 kHz / 16-bit mono)
         chunk_size = 3200
         for i in range(0, len(pcm), chunk_size):
             await llm.push_frame(
@@ -75,11 +76,15 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     )
 
     input_gate = ToolCallInputGate(llm)
+    ttfb_starter = TtfbStartOnUserStop(llm)
+    latency_observer = create_latency_observer()
+    metrics_observer = MetricsLogObserver()
 
     pipeline = Pipeline(
         [
             transport.input(),
             context_aggregator.user(),
+            ttfb_starter,
             llm,
             input_gate,
             transport.output(),
@@ -94,7 +99,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             audio_out_sample_rate=16000,
             enable_metrics=True,
             enable_usage_metrics=True,
+            report_only_initial_ttfb=False,
         ),
+        observers=[latency_observer, metrics_observer],
         idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
     )
 

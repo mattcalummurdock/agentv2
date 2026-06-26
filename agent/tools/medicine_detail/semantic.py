@@ -70,7 +70,7 @@ async def semantic_search(mention: str) -> list[dict[str, Any]]:
     vec = embed_text(mention)
     vec_literal = "[" + ",".join(str(v) for v in vec) + "]"
 
-    pool = get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(_SEMANTIC_SQL, vec_literal)
 

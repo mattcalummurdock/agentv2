@@ -1,19 +1,35 @@
 import json
 import os
-from typing import Optional
+from typing import Any, Optional
 
+from google.genai.types import ThinkingConfig, ThinkingLevel
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
-from pipecat.services.google.gemini_live.vertex.llm import GeminiLiveVertexLLMService
+from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 
 from prompts.system import SYSTEM_INSTRUCTION
-from prompts.tool_calls import TOOL_CALL_ANNOUNCEMENT
+from prompts.tool_calls import TOOL_GUIDANCE
 
-DEFAULT_MODEL_ID = "google/gemini-live-2.5-flash-native-audio"
+DEFAULT_MODEL_ID = os.getenv(
+    "GOOGLE_LIVE_MODEL", "models/gemini-3.1-flash-live-preview"
+)
+THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "minimal").strip().lower()
 DEFAULT_VOICE_ID = "Aoede"
+DEFAULT_TEMPERATURE = 0.2
+
+_THINKING_LEVELS = {
+    "minimal": ThinkingLevel.MINIMAL,
+    "low": ThinkingLevel.LOW,
+    "medium": ThinkingLevel.MEDIUM,
+    "high": ThinkingLevel.HIGH,
+}
 
 
 def build_system_instruction() -> str:
-    return f"{SYSTEM_INSTRUCTION.strip()}\n\n{TOOL_CALL_ANNOUNCEMENT.strip()}"
+    return (
+        f"{SYSTEM_INSTRUCTION.strip()}\n\n{TOOL_GUIDANCE.strip()}\n\n"
+        "LATENCY: Start speaking immediately. Keep replies to one or two short "
+        "sentences at a natural conversational pace — never slow or drawn out."
+    )
 
 
 def fix_credentials() -> str:
@@ -66,21 +82,48 @@ def fix_credentials() -> str:
     return json.dumps(creds_dict)
 
 
+def _thinking_config() -> ThinkingConfig | None:
+    level = THINKING_LEVEL
+    if level in ("off", "none", "disabled", ""):
+        return None
+    thinking_level = _THINKING_LEVELS.get(level)
+    if thinking_level is None:
+        raise ValueError(
+            f"Invalid GEMINI_THINKING_LEVEL={THINKING_LEVEL!r}. "
+            f"Use one of: off, {', '.join(_THINKING_LEVELS)}"
+        )
+    return ThinkingConfig(thinking_level=thinking_level)
+
+
+def _llm_settings(*, model_id: str, voice_id: str) -> dict[str, Any]:
+    settings: dict[str, Any] = {
+        "model": model_id,
+        "voice": voice_id,
+        "temperature": DEFAULT_TEMPERATURE,
+        "system_instruction": build_system_instruction(),
+    }
+    thinking = _thinking_config()
+    if thinking is not None:
+        settings["thinking"] = thinking
+    return settings
+
+
 def create_llm(
     voice_id: str = DEFAULT_VOICE_ID,
     tools: Optional[ToolsSchema] = None,
-) -> GeminiLiveVertexLLMService:
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
-    location = os.getenv("GOOGLE_CLOUD_LOCATION")
+    model_id: str = DEFAULT_MODEL_ID,
+) -> GeminiLiveLLMService:
+    """Gemini 3.1 Flash Live via the Gemini API (requires GOOGLE_API_KEY)."""
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "GOOGLE_API_KEY is required. Get one from https://aistudio.google.com/apikey"
+        )
 
-    return GeminiLiveVertexLLMService(
-        credentials=fix_credentials(),
-        project_id=project_id,
-        location=location,
+    return GeminiLiveLLMService(
+        api_key=api_key,
         tools=tools,
-        settings=GeminiLiveVertexLLMService.Settings(
-            model=DEFAULT_MODEL_ID,
-            voice=voice_id,
-            system_instruction=build_system_instruction(),
+        settings=GeminiLiveLLMService.Settings(
+            **_llm_settings(model_id=model_id, voice_id=voice_id),
         ),
     )

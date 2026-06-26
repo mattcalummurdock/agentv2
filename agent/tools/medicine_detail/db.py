@@ -4,6 +4,7 @@ from typing import Any
 import asyncpg
 
 _pool: asyncpg.Pool | None = None
+_pool_refs: int = 0
 
 MEDICINE_COLUMNS = """
     id, name, generic_name, brand_name, form, pack_size,
@@ -52,24 +53,33 @@ def format_medicine_row(row: asyncpg.Record, **extra: Any) -> dict[str, Any]:
     return item
 
 
-async def init_pool() -> None:
-    global _pool
-    if _pool is not None:
-        return
+async def _create_pool() -> asyncpg.Pool:
     dsn = os.getenv("DATABASE_URL")
     if not dsn:
         raise ValueError("DATABASE_URL environment variable is not set")
-    _pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10)
+    return await asyncpg.create_pool(dsn, min_size=2, max_size=10)
+
+
+async def init_pool() -> None:
+    """Acquire a reference to the shared pool (one per active bot session)."""
+    global _pool, _pool_refs
+    if _pool is None:
+        _pool = await _create_pool()
+    _pool_refs += 1
 
 
 async def close_pool() -> None:
-    global _pool
-    if _pool is not None:
+    """Release a session reference; close the pool when none remain."""
+    global _pool, _pool_refs
+    if _pool_refs > 0:
+        _pool_refs -= 1
+    if _pool_refs == 0 and _pool is not None:
         await _pool.close()
         _pool = None
 
 
-def get_pool() -> asyncpg.Pool:
+async def get_pool() -> asyncpg.Pool:
+    global _pool
     if _pool is None:
-        raise RuntimeError("Database pool is not initialized. Call init_pool() first.")
+        _pool = await _create_pool()
     return _pool
