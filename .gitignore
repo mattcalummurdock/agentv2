@@ -44,3 +44,5 @@ models/
 # Pipecat / local runner artifacts
 *.wav
 *.mp3
+
+reference/

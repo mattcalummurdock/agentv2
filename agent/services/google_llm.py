@@ -27,8 +27,13 @@ _THINKING_LEVELS = {
 def build_system_instruction() -> str:
     return (
         f"{SYSTEM_INSTRUCTION.strip()}\n\n{TOOL_GUIDANCE.strip()}\n\n"
+        "LANGUAGE REMINDER: Reply in the caller's language from their first utterance. "
+        "English only for the opening greeting before they speak. Never stay in English "
+        "if they spoke Hindi, Tamil, Telugu, or any other language.\n"
         "LATENCY: Start speaking immediately. Keep replies to one or two short "
-        "sentences at a natural conversational pace — never slow or drawn out."
+        "sentences at a natural conversational pace — never slow or drawn out.\n"
+        "BANNED PHRASES when naming medicines: 'based on what you said', "
+        "'this looks like', 'it seems like', 'sounds like you mean'."
     )
 
 

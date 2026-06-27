@@ -126,6 +126,107 @@ LIMIT 40
 """
 
 
+_PLACEHOLDER_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "some",
+        "any",
+        "certain",
+        "particular",
+        "specific",
+        "this",
+        "that",
+        "these",
+        "those",
+        "one",
+        "another",
+        "other",
+        "medicine",
+        "medicines",
+        "medication",
+        "medications",
+        "med",
+        "meds",
+        "drug",
+        "drugs",
+        "pill",
+        "pills",
+        "tablet",
+        "tablets",
+        "capsule",
+        "capsules",
+        "syrup",
+        "injection",
+        "product",
+        "item",
+        "brand",
+        "generic",
+        "looking",
+        "searching",
+        "find",
+        "need",
+        "want",
+        "get",
+        "help",
+        "tell",
+        "know",
+        "about",
+        "regarding",
+        "called",
+        "named",
+        "please",
+        "kindly",
+        "something",
+        "anything",
+        "prescription",
+        "rx",
+        "strip",
+        "pack",
+        "box",
+        "for",
+        "with",
+        "from",
+        "have",
+        "got",
+        "am",
+        "im",
+        "i",
+        "you",
+        "me",
+        "my",
+        "your",
+    }
+)
+
+MISSING_DRUG_NAME_HINT = (
+    "The caller did not name a specific medicine. Do NOT invent a search or quote catalog data. "
+    "Ask them: 'Which medicine are you looking for? You can tell me the name as written on "
+    "your prescription or pack — even if you're unsure of the spelling.'"
+)
+
+
+def mention_has_confident_name_tokens(mention: str) -> bool:
+    """True when the caller spoke a substantial product name, not just short fragments."""
+    tokens = [token for token in _core_name_tokens(mention) if len(token) >= 2]
+    if any(len(token) >= 5 for token in tokens):
+        return True
+    return len(tokens) >= 2 and any(len(token) >= 4 for token in tokens)
+
+
+def is_placeholder_mention(mention: str) -> bool:
+    """True when the caller gave only generic words (e.g. 'specific medicine') with no drug name."""
+    cleaned = mention.strip()
+    if not cleaned:
+        return True
+    tokens = re.findall(r"[a-zA-Z0-9]+", cleaned.lower())
+    if not tokens:
+        return True
+    meaningful = [token for token in tokens if token not in _PLACEHOLDER_WORDS]
+    return len(meaningful) == 0
+
+
 def _normalize_match_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 

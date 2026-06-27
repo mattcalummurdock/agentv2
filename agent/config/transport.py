@@ -24,6 +24,6 @@ transport_params = {
     "webrtc": lambda: TransportParams(
         audio_in_enabled=True,
         audio_out_enabled=True,
-        vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2, min_volume=0.8, start_secs=0.2)),
+        vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2, min_volume=0.4, start_secs=0.2)),
     ),
 }
