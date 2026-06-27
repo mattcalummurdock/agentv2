@@ -4,6 +4,9 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
+import asyncio
+import atexit
+
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.frames.frames import LLMRunFrame, TTSAudioRawFrame
@@ -16,11 +19,12 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.runner.types import RunnerArguments
-from pipecat.runner.utils import create_transport
+from pipecat.runner.utils import create_transport, parse_telephony_websocket
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.turns.user_mute import FunctionCallUserMuteStrategy
 
 from config.transport import transport_params
+from post_processor import parse_call_session, process_call_end, shutdown_postprocessor
 from prompts.system import INITIAL_USER_MESSAGE
 from services import hold_phrases
 from services.google_llm import create_llm, fix_credentials
@@ -37,8 +41,25 @@ from tools.registry import build_tools_schema, register_tools
 load_dotenv(override=True)
 
 
-async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
+def _log_postprocess_task(task: asyncio.Task) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        logger.warning("Post-processing task was cancelled")
+    except Exception as e:
+        logger.error(f"Post-processing failed: {e}")
+
+
+async def run_bot(
+    transport: BaseTransport,
+    runner_args: RunnerArguments,
+    *,
+    call_data: dict | None = None,
+):
     logger.info("Starting Agent (Gemini 3.1 Flash Live)")
+
+    session = parse_call_session(call_data)
+    postprocess_tasks: list[asyncio.Task] = []
 
     await init_pool()
     if prewarm_embedding_model():
@@ -105,6 +126,20 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
     )
 
+    async def _on_session_end(label: str) -> None:
+        logger.info(f"{label} — scheduling post-processing")
+        messages = context.get_messages()
+        pp_task = asyncio.create_task(
+            process_call_end(
+                messages,
+                caller_phone=session.customer_phone,
+                call_sid=session.call_sid,
+            )
+        )
+        pp_task.add_done_callback(_log_postprocess_task)
+        postprocess_tasks.append(pp_task)
+        await task.cancel()
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info("Client connected")
@@ -112,19 +147,27 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
-        logger.info("Client disconnected")
-        await task.cancel()
+        await _on_session_end("Client disconnected")
 
     runner = PipelineRunner(handle_sigint=runner_args.handle_sigint)
     try:
         await runner.run(task)
     finally:
+        if postprocess_tasks:
+            await asyncio.gather(*postprocess_tasks, return_exceptions=True)
         await close_pool()
 
 
 async def bot(runner_args: RunnerArguments):
+    call_data = None
+    if getattr(runner_args, "websocket", None):
+        _, call_data = await parse_telephony_websocket(runner_args.websocket)
+
     transport = await create_transport(runner_args, transport_params)
-    await run_bot(transport, runner_args)
+    await run_bot(transport, runner_args, call_data=call_data)
+
+
+atexit.register(shutdown_postprocessor)
 
 
 if __name__ == "__main__":

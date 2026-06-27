@@ -4,7 +4,9 @@ import os
 import re
 from typing import Any
 
-from tools.medicine_detail.db import MEDICINE_COLUMNS, format_medicine_row, get_pool
+import asyncpg
+
+from tools.medicine_detail.db import MEDICINE_COLUMNS, acquire_pool, format_medicine_row
 
 TEXT_CONFIDENT_SCORE = float(os.getenv("MEDICINE_TEXT_CONFIDENT_SCORE", "85"))
 TEXT_SIMILARITY_THRESHOLD = float(os.getenv("MEDICINE_TEXT_SIMILARITY_THRESHOLD", "0.25"))
@@ -343,11 +345,15 @@ def _passes_min_score(row: dict[str, Any]) -> bool:
     return float(row.get("match_score") or 0) >= threshold
 
 
-async def text_search(mention: str) -> list[dict[str, Any]]:
+async def text_search(
+    mention: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> list[dict[str, Any]]:
     terms = search_terms_from_mention(mention)
     best_by_id: dict[int, dict[str, Any]] = {}
-    pool = await get_pool()
-    async with pool.acquire() as conn:
+    db_pool = await acquire_pool(pool)
+    async with db_pool.acquire() as conn:
         for term in terms:
             rows = await conn.fetch(_TEXT_SQL, term, TEXT_SIMILARITY_THRESHOLD)
             for row in rows:
@@ -360,14 +366,19 @@ async def text_search(mention: str) -> list[dict[str, Any]]:
     return sorted(best_by_id.values(), key=lambda x: x["match_score"], reverse=True)
 
 
-async def pack_letter_search(mention: str, *, min_score: float = 45.0) -> list[dict[str, Any]]:
+async def pack_letter_search(
+    mention: str,
+    *,
+    min_score: float = 45.0,
+    pool: asyncpg.Pool | None = None,
+) -> list[dict[str, Any]]:
     clues = extract_pack_letter_clues(mention)
     if not clues:
         return []
 
     best_by_id: dict[int, dict[str, Any]] = {}
-    pool = await get_pool()
-    async with pool.acquire() as conn:
+    db_pool = await acquire_pool(pool)
+    async with db_pool.acquire() as conn:
         for clue in clues[:4]:
             rows = await conn.fetch(_PACK_CANDIDATE_SQL, clue, PACK_SIMILARITY_THRESHOLD)
             for row in rows:
@@ -398,11 +409,12 @@ async def search_medicines_by_mention(
     mention: str,
     *,
     min_score: float = 40.0,
+    pool: asyncpg.Pool | None = None,
 ) -> list[dict[str, Any]]:
     if not mention.strip():
         return []
 
-    text_results = await text_search(mention)
+    text_results = await text_search(mention, pool=pool)
     if text_results and text_results[0]["match_score"] >= TEXT_CONFIDENT_SCORE:
         return text_results
 
@@ -410,8 +422,8 @@ async def search_medicines_by_mention(
 
     from tools.medicine_detail.semantic import semantic_search
 
-    pack_task = asyncio.create_task(pack_letter_search(mention))
-    semantic_task = asyncio.create_task(semantic_search(mention))
+    pack_task = asyncio.create_task(pack_letter_search(mention, pool=pool))
+    semantic_task = asyncio.create_task(semantic_search(mention, pool=pool))
     pack_results, semantic_results = await asyncio.gather(pack_task, semantic_task)
 
     merged: dict[int, dict[str, Any]] = {}

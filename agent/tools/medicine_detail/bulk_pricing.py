@@ -1,15 +1,21 @@
 from typing import Any
 
-from tools.medicine_detail.db import get_pool
+import asyncpg
+
+from tools.medicine_detail.db import acquire_pool, get_pool
 
 
-async def attach_bulk_pricing(medicines: list[dict[str, Any]]) -> None:
+async def attach_bulk_pricing(
+    medicines: list[dict[str, Any]],
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> None:
     ids = [int(m["id"]) for m in medicines if m.get("id")]
     if not ids:
         return
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:
+    db_pool = await acquire_pool(pool)
+    async with db_pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT medicine_id, quantity, total_price, label, display_order

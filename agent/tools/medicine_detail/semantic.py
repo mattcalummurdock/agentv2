@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 import os
 from typing import Any
 
-from tools.medicine_detail.db import get_pool
+import asyncpg
+
+from tools.medicine_detail.db import acquire_pool, format_medicine_row
 
 SEMANTIC_ENABLED = os.getenv("SEMANTIC_SEARCH_ENABLED", "1").strip().lower() in (
     "1",
@@ -61,17 +61,19 @@ LIMIT 5
 """
 
 
-async def semantic_search(mention: str) -> list[dict[str, Any]]:
-    from tools.medicine_detail.db import format_medicine_row
-
+async def semantic_search(
+    mention: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> list[dict[str, Any]]:
     if not semantic_search_available():
         return []
 
     vec = embed_text(mention)
     vec_literal = "[" + ",".join(str(v) for v in vec) + "]"
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:
+    db_pool = await acquire_pool(pool)
+    async with db_pool.acquire() as conn:
         rows = await conn.fetch(_SEMANTIC_SQL, vec_literal)
 
     results: list[dict[str, Any]] = []

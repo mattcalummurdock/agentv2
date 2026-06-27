@@ -6,6 +6,12 @@ import asyncpg
 _pool: asyncpg.Pool | None = None
 _pool_refs: int = 0
 
+
+async def acquire_pool(pool: asyncpg.Pool | None = None) -> asyncpg.Pool:
+    if pool is not None:
+        return pool
+    return await get_pool()
+
 MEDICINE_COLUMNS = """
     id, name, generic_name, brand_name, form, pack_size,
     selling_price, mrp, discount_percent, price_per_unit, currency,
