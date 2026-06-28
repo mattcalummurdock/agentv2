@@ -88,21 +88,39 @@ def extract_medicine_context(conversation: str) -> dict[str, Any]:
         }
 
 
+CALL_TYPES = (
+    "Inquiry - Cost",
+    "Inquiry - Delivery Days",
+    "Order Placement",
+    "Existing Customer Inquiry",
+    "Support - Delivery Delay",
+    "Support - Complaint",
+    "Escalation",
+    "General Inquiry",
+)
+
+
 def generate_analytics(conversation: str) -> dict[str, Any]:
+    call_type_options = ", ".join(CALL_TYPES)
     try:
         result = groq_json(
             "Analyze a Mr. Med pharmacy sales call. Return JSON with: "
             "city (caller's city if mentioned, else empty string), "
-            "intent_level (TOFU, MOFU, or BOFU — BOFU if ready to order).",
+            "intent_level (TOFU, MOFU, or BOFU — BOFU if ready to order), "
+            f"call_type (exactly one of: {call_type_options}).",
             f"Conversation:\n{conversation}",
         )
         intent_level = str(result.get("intent_level", "TOFU") or "TOFU").upper()
         if intent_level not in ("TOFU", "MOFU", "BOFU"):
             intent_level = "TOFU"
+        call_type = str(result.get("call_type", "") or "").strip()
+        if call_type not in CALL_TYPES:
+            call_type = "General Inquiry"
         return {
             "city": str(result.get("city", "") or "").strip(),
             "intent_level": intent_level,
+            "call_type": call_type,
         }
     except Exception as e:
         pp_logger.error(f"Analytics generation failed: {e}")
-        return {"city": "", "intent_level": "TOFU"}
+        return {"city": "", "intent_level": "TOFU", "call_type": "General Inquiry"}
