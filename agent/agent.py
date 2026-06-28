@@ -6,10 +6,11 @@
 
 import asyncio
 import atexit
+import sys
 
 from dotenv import load_dotenv
 from loguru import logger
-from pipecat.frames.frames import LLMRunFrame, TTSAudioRawFrame
+from pipecat.frames.frames import TTSAudioRawFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -37,6 +38,9 @@ from services.tool_call_input_gate import ToolCallInputGate
 from tools.medicine_detail.db import close_pool, init_pool
 from tools.medicine_detail.semantic import prewarm_embedding_model
 from tools.registry import build_tools_schema, register_tools
+from transports import register_session_handlers
+from transports.daily.routes import patch_runner_with_daily_routes
+from transports.ngrok import get_cli_port, prepare_public_url, print_startup_banner
 
 load_dotenv(override=True)
 
@@ -140,14 +144,7 @@ async def run_bot(
         postprocess_tasks.append(pp_task)
         await task.cancel()
 
-    @transport.event_handler("on_client_connected")
-    async def on_client_connected(transport, client):
-        logger.info("Client connected")
-        await task.queue_frames([LLMRunFrame()])
-
-    @transport.event_handler("on_client_disconnected")
-    async def on_client_disconnected(transport, client):
-        await _on_session_end("Client disconnected")
+    register_session_handlers(transport, task, _on_session_end)
 
     runner = PipelineRunner(handle_sigint=runner_args.handle_sigint)
     try:
@@ -172,5 +169,14 @@ atexit.register(shutdown_postprocessor)
 
 if __name__ == "__main__":
     from pipecat.runner.run import main
+
+    patch_runner_with_daily_routes(run_bot)
+
+    if "--host" not in sys.argv:
+        sys.argv.extend(["--host", "0.0.0.0"])
+
+    port = get_cli_port()
+    public_url = prepare_public_url(port)
+    print_startup_banner(public_url, port)
 
     main()

@@ -3,7 +3,17 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 
+try:
+    from pipecat.transports.daily.transport import DailyParams
+except ImportError:
+    from pipecat.transports.services.daily import DailyParams
+
 transport_params = {
+    "daily": lambda: DailyParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+        vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.3, min_volume=0.6)),
+    ),
     "twilio": lambda: FastAPIWebsocketParams(
         audio_in_enabled=True,
         audio_out_enabled=True,

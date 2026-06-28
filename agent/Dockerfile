@@ -13,4 +13,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-dev
 
 # Copy the application code
-COPY ./bot.py bot.py
+COPY ./agent.py agent.py
+COPY ./config config
+COPY ./post_processor post_processor
+COPY ./prompts prompts
+COPY ./services services
+COPY ./tools tools
+COPY ./transports transports
+
+CMD ["uv", "run", "agent.py"]
