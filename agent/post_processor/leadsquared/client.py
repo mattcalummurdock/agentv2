@@ -49,6 +49,8 @@ def search_lead_by_phone(phone: str) -> dict[str, Any] | None:
             params={**auth_params(), "phone": candidate},
             timeout=REQUEST_TIMEOUT,
         )
+        if response.status_code == 404:
+            continue
         response.raise_for_status()
         data = response.json()
         leads = data if isinstance(data, list) else data.get("Leads", [])
@@ -103,14 +105,14 @@ def log_activity(
     activity_note: str,
 ) -> None:
     """Log a phone call activity under the lead."""
-    url = f"{get_base_url()}/ProspectActivity.svc/Activity.Create"
+    url = f"{get_base_url()}/ProspectActivity.svc/Create"
     note_body = _truncate_note(activity_note)
 
     payload: dict[str, Any] = {
         "RelatedProspectId": prospect_id,
         "ActivityEvent": get_phone_activity_type_id(),
         "ActivityNote": note_body,
-        "ActivityDateTime": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "ActivityDateTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Fields": [
             {"SchemaName": get_field_call_type(), "Value": call_type},
             {"SchemaName": get_field_medicine(), "Value": medicine or ""},

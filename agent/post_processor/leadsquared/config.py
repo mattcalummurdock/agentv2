@@ -1,7 +1,7 @@
 import os
 
-DEFAULT_BASE_URL = "https://api.in21.leadsquared.com/v2"
-DEFAULT_PHONE_ACTIVITY_TYPE_ID = 9
+DEFAULT_BASE_URL = "https://api-in21.leadsquared.com/v2"
+DEFAULT_PHONE_ACTIVITY_TYPE_ID = 103
 DEFAULT_FIELD_CALL_TYPE = "mx_Call_Type"
 DEFAULT_FIELD_MEDICINE = "mx_Medicine_of_Interest"
 MAX_ACTIVITY_NOTE_CHARS = 30_000
