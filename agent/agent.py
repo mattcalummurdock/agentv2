@@ -6,7 +6,6 @@
 
 import asyncio
 import atexit
-import sys
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -39,8 +38,7 @@ from tools.medicine_detail.db import close_pool, init_pool
 from tools.medicine_detail.semantic import prewarm_embedding_model
 from tools.registry import build_tools_schema, register_tools
 from transports import register_session_handlers
-from transports.daily.routes import patch_runner_with_daily_routes
-from transports.ngrok import get_cli_port, prepare_public_url, print_startup_banner
+from transports.launch import configure_launch, prepare_runner
 
 load_dotenv(override=True)
 
@@ -170,13 +168,6 @@ atexit.register(shutdown_postprocessor)
 if __name__ == "__main__":
     from pipecat.runner.run import main
 
-    patch_runner_with_daily_routes(run_bot)
-
-    if "--host" not in sys.argv:
-        sys.argv.extend(["--host", "0.0.0.0"])
-
-    port = get_cli_port()
-    public_url = prepare_public_url(port)
-    print_startup_banner(public_url, port)
-
+    web_mode = configure_launch()
+    prepare_runner(run_bot, web_mode=web_mode)
     main()

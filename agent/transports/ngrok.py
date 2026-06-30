@@ -113,3 +113,13 @@ def print_startup_banner(public_url: str, port: int) -> None:
     print("AGENT_PUBLIC_URL is set in this process (use the same value for the")
     print("separately hosted frontend's AGENT_SERVER_URL env var).")
     print()
+
+
+def print_webrtc_startup_banner(port: int) -> None:
+    print()
+    print("Mr. Med WebRTC voice agent:")
+    print(f"   Open http://127.0.0.1:{port}/client in your browser")
+    print(f"   Local server: http://127.0.0.1:{port}")
+    print()
+    print("Daily routes are disabled in -web mode.")
+    print()

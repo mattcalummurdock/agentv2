@@ -12,7 +12,7 @@ transport_params = {
     "daily": lambda: DailyParams(
         audio_in_enabled=True,
         audio_out_enabled=True,
-        vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.3, min_volume=0.6)),
+        vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2, min_volume=0.4, start_secs=0.2)),
     ),
     "twilio": lambda: FastAPIWebsocketParams(
         audio_in_enabled=True,
