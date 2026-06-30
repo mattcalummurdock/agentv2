@@ -63,18 +63,19 @@ def search_lead_by_phone(phone: str) -> dict[str, Any] | None:
     return None
 
 
-def create_lead(name: str, phone: str) -> str:
+def create_lead(name: str, phone: str | None = None) -> str:
     """Create a new lead and return the ProspectID."""
     url = f"{get_base_url()}/LeadManagement.svc/Lead.Create"
     parts = name.strip().split(" ", 1)
     first_name = parts[0]
     last_name = parts[1] if len(parts) > 1 else ""
 
-    payload = [
+    payload: list[dict[str, str]] = [
         {"Attribute": "FirstName", "Value": first_name},
         {"Attribute": "LastName", "Value": last_name},
-        {"Attribute": "Phone", "Value": phone},
     ]
+    if phone:
+        payload.append({"Attribute": "Phone", "Value": phone})
 
     response = requests.post(
         url,
@@ -88,7 +89,9 @@ def create_lead(name: str, phone: str) -> str:
     prospect_id = data.get("Message", {}).get("Id") or data.get("ProspectId")
     if not prospect_id:
         raise ValueError(f"LeadSquared create lead returned no prospect id: {data!r}")
-    pp_logger.info(f"LeadSquared: created lead {prospect_id} name={name!r}")
+    pp_logger.info(
+        f"LeadSquared: created lead {prospect_id} name={name!r} phone={phone!r}"
+    )
     return str(prospect_id)
 
 

@@ -14,6 +14,7 @@ def _format_activity_note(record: ProcessedCallRecord) -> str:
     bulk = ", ".join(record.bulk_offers) if record.bulk_offers else "N/A"
     return (
         f"Call Type: {record.call_type}\n"
+        f"Phone: {record.phone or 'N/A'}\n"
         f"Medicine of Interest: {record.course_interest or 'N/A'}\n"
         f"City: {record.city or 'N/A'}\n"
         f"Budget: {record.budget or 'N/A'}\n"
@@ -36,17 +37,17 @@ def sync_call_to_leadsquared(
         pp_logger.info(f"{prefix}LeadSquared skipped (disabled or missing credentials)")
         return SyncResult(lsq_ok=None, skip_reason="disabled")
 
-    if not record.phone:
-        pp_logger.info(f"{prefix}LeadSquared skipped (no phone)")
-        return SyncResult(lsq_ok=None, skip_reason="no phone")
-
     try:
-        lead = client.search_lead_by_phone(record.phone)
-        if lead:
-            prospect_id = str(lead.get("ProspectID") or lead.get("Id") or "")
+        if record.phone:
+            lead = client.search_lead_by_phone(record.phone)
+            if lead:
+                prospect_id = str(lead.get("ProspectID") or lead.get("Id") or "")
+            else:
+                pp_logger.info(f"{prefix}LeadSquared: no lead found, creating")
+                prospect_id = client.create_lead(record.name, record.phone)
         else:
-            pp_logger.info(f"{prefix}LeadSquared: no lead found, creating")
-            prospect_id = client.create_lead(record.name, record.phone)
+            pp_logger.info(f"{prefix}LeadSquared: no phone, creating lead without phone")
+            prospect_id = client.create_lead(record.name, phone=None)
 
         if not prospect_id:
             raise ValueError("Could not resolve LeadSquared prospect id")
